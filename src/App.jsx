@@ -10,6 +10,7 @@ import {
   Compass,
   Heart,
   Gem,
+  LoaderCircle,
   MapPin,
   Menu,
   Music2,
@@ -24,6 +25,10 @@ import Gatefold from "./components/Gatefold";
 import ScratchCard from "./components/ScratchCard";
 import Countdown from "./components/Countdown";
 import RSVP from "./components/RSVP";
+import galleryImage01 from "./assets/images/img01.jpg";
+import galleryImage02 from "./assets/images/img02.jpg";
+import galleryImage03 from "./assets/images/img03.jpg";
+import galleryImage04 from "./assets/images/img04.jpg";
 import "./App.css";
 
 const revealVariants = {
@@ -129,9 +134,10 @@ function saveDateToCalendar(event) {
   URL.revokeObjectURL(downloadUrl);
 }
 
-function Reveal({ children, variant = "rise", delay = 0, className }) {
+function Reveal({ children, variant = "rise", delay = 0, className, ...props }) {
   return (
     <motion.div
+      {...props}
       className={className}
       variants={revealVariants[variant]}
       initial="hidden"
@@ -145,26 +151,62 @@ function Reveal({ children, variant = "rise", delay = 0, className }) {
 }
 
 function App() {
+  const [isLoading, setIsLoading] = useState(true);
   const [isOpen, setIsOpen] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [hasRevealed, setHasRevealed] = useState(false);
   const [showBackToTop, setShowBackToTop] = useState(false);
   const lastSectionVisibleRef = useRef(false);
+  const galleryPointerStartRef = useRef(null);
+  const [isGalleryImageLoading, setIsGalleryImageLoading] = useState(true);
   const [slide, setSlide] = useState(0);
   const slides = [
     {
-      src: "https://images.unsplash.com/photo-1519741497674-611481863552?auto=format&fit=crop&w=1000&q=85",
+      src: galleryImage01,
       label: "The ceremony garden",
     },
     {
-      src: "https://images.unsplash.com/photo-1465495976277-4387d4b0e4a6?auto=format&fit=crop&w=1000&q=85",
+      src: galleryImage02,
       label: "A golden afternoon",
     },
     {
-      src: "https://images.unsplash.com/photo-1507504031003-b417219a0fde?auto=format&fit=crop&w=1000&q=85",
+      src: galleryImage03,
       label: "Together, always",
     },
+    {
+      src: galleryImage04,
+      label: "A quiet moment",
+    },
   ];
+
+  useEffect(() => {
+    const startedAt = Date.now();
+    let hasFinished = false;
+    let minimumTimer;
+    let fallbackTimer;
+
+    const finishLoading = () => {
+      if (hasFinished) return;
+      hasFinished = true;
+      Promise.resolve(document.fonts?.ready).then(() => {
+        const remainingTime = Math.max(0, 700 - (Date.now() - startedAt));
+        minimumTimer = window.setTimeout(() => setIsLoading(false), remainingTime);
+      });
+    };
+
+    if (document.readyState === "complete") {
+      finishLoading();
+    } else {
+      window.addEventListener("load", finishLoading, { once: true });
+    }
+    fallbackTimer = window.setTimeout(finishLoading, 3000);
+
+    return () => {
+      window.removeEventListener("load", finishLoading);
+      window.clearTimeout(minimumTimer);
+      window.clearTimeout(fallbackTimer);
+    };
+  }, []);
 
   useEffect(() => {
     if (!isOpen) return undefined;
@@ -209,8 +251,58 @@ function App() {
     });
   };
 
+  const changeSlide = (direction) => {
+    setIsGalleryImageLoading(true);
+    setSlide((currentSlide) =>
+      (currentSlide + direction + slides.length) % slides.length,
+    );
+  };
+
+  const handleGalleryPointerDown = (event) => {
+    if (event.pointerType === "mouse" && event.button !== 0) return;
+    galleryPointerStartRef.current = {
+      x: event.clientX,
+      y: event.clientY,
+    };
+  };
+
+  const handleGalleryPointerUp = (event) => {
+    const start = galleryPointerStartRef.current;
+    galleryPointerStartRef.current = null;
+    if (!start) return;
+
+    const distanceX = event.clientX - start.x;
+    const distanceY = event.clientY - start.y;
+    if (Math.abs(distanceX) < 50 || Math.abs(distanceX) < Math.abs(distanceY)) {
+      return;
+    }
+
+    changeSlide(distanceX < 0 ? 1 : -1);
+  };
+
   return (
     <main className="invite-shell">
+      <AnimatePresence>
+        {isLoading && (
+          <motion.div
+            className="page-loader"
+            initial={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.5, ease: "easeInOut" }}
+            aria-live="polite"
+            aria-label="Loading invitation"
+          >
+            <div className="page-loader__mark">
+              <Heart size={18} fill="currentColor" />
+            </div>
+            <p className="page-loader__names">Sibin <i>&</i> Stefi</p>
+            <div className="page-loader__line" aria-hidden="true">
+              <span />
+            </div>
+            <p className="page-loader__status">Preparing your invitation</p>
+          </motion.div>
+        )}
+      </AnimatePresence>
       <Gatefold isOpen={isOpen} onOpen={() => setIsOpen(true)} />
       {isOpen && (
         <div className="invite-page">
@@ -376,22 +468,40 @@ function App() {
               <p className="eyebrow">A few favorite frames</p>
               <h2>Meet us by the lake</h2>
             </Reveal>
-            <Reveal variant="slide" delay={0.16} className="gallery-slider">
+            <Reveal
+              variant="slide"
+              delay={0.16}
+              className="gallery-slider"
+              onPointerDown={handleGalleryPointerDown}
+              onPointerUp={handleGalleryPointerUp}
+              onPointerCancel={() => {
+                galleryPointerStartRef.current = null;
+              }}
+              onContextMenu={(event) => event.preventDefault()}
+            >
+              {isGalleryImageLoading && (
+                <div className="gallery-loading" aria-live="polite">
+                  <LoaderCircle size={24} />
+                  <span>Loading photo</span>
+                </div>
+              )}
               <motion.img
                 key={slides[slide].src}
                 initial={{ opacity: 0.3 }}
                 animate={{ opacity: 1 }}
                 src={slides[slide].src}
                 alt={slides[slide].label}
+                draggable="false"
+                onError={() => setIsGalleryImageLoading(false)}
+                onLoad={() => setIsGalleryImageLoading(false)}
+                onDragStart={(event) => event.preventDefault()}
               />
               <div className="gallery-caption">
                 <span>{slides[slide].label}</span>
                 <div>
                   <button
                     type="button"
-                    onClick={() =>
-                      setSlide((slide + slides.length - 1) % slides.length)
-                    }
+                    onClick={() => changeSlide(-1)}
                     aria-label="Previous photo"
                   >
                     <ChevronLeft />
@@ -401,7 +511,7 @@ function App() {
                   </span>
                   <button
                     type="button"
-                    onClick={() => setSlide((slide + 1) % slides.length)}
+                    onClick={() => changeSlide(1)}
                     aria-label="Next photo"
                   >
                     <ChevronRight />
